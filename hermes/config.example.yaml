@@ -1,0 +1,60 @@
+# Add these entries under mcp_servers in ~/.hermes/config.yaml (merge with what is there),
+# then run /reload-mcp in a Hermes session. scripts/install.sh prints this with your path filled in.
+#
+# Put secrets in ~/.hermes/.env, not here:
+#   DEXRA_API_KEY=dxr_...
+#   JUPITER_API_KEY=...        # optional in dry run (adds a quote), needed for live
+#   SOLANA_PRIVATE_KEY=...     # only for live trading; use a dedicated low-balance wallet
+# Hermes resolves ${VAR} from that file or the process environment.
+
+mcp_servers:
+  # Local stdio server: check_token, preflight, fresh_launches, buy, sell.
+  # buy and sell live here, on the Dexra trading core, so the guard runs on every buy.
+  dexra_trader:
+    command: uv
+    args: ["run", "--directory", "/path/to/template-hermes", "dexra-trader"]
+    env:
+      # Hermes passes stdio servers only PATH, HOME and a few other safe variables plus this block.
+      DEXRA_API_KEY: "${DEXRA_API_KEY}"
+      JUPITER_API_KEY: "${JUPITER_API_KEY}"
+      SOLANA_PRIVATE_KEY: "${SOLANA_PRIVATE_KEY}"
+      # Safety settings stay literal so they are visible here. Live needs all three:
+      # DRY_RUN: "false", SOLANA_PRIVATE_KEY and JUPITER_API_KEY.
+      DRY_RUN: "true"
+      MAX_TRADE_SOL: "0.05"
+      SLIPPAGE_BPS: "100"
+      ALLOW_CAUTION: "false"
+    tools:
+      include: [check_token, preflight, fresh_launches, buy, sell]
+      resources: false
+      prompts: false
+    timeout: 120
+
+  # Optional: Dexra's remote MCP server (Streamable HTTP) for research. It has no trading tools.
+  # Hermes refuses to connect it while DEXRA_API_KEY is unset; set enabled: false until you have a key.
+  dexra:
+    url: "https://api.dexra.dev/mcp"
+    headers:
+      Authorization: "Bearer ${DEXRA_API_KEY}"
+    tools:
+      # token_deep_check, swap_preflight and new_launches are left out: dexra_trader already has them,
+      # and one name per check keeps the model on the guarded path.
+      include:
+        - describe_address
+        - service_stats
+        - score_performance
+        - wallet_check
+        - pool_health
+        - token_holders_delta
+        - clmm_range_stats
+        - market_snapshot
+        - new_launches_batch
+      resources: false
+      prompts: false
+    enabled: true
+
+# The skill is installed by scripts/install.sh into ~/.hermes/skills/trading/.
+# To load it from this checkout instead, without copying:
+# skills:
+#   external_dirs:
+#     - /path/to/template-hermes/skills
